@@ -34,6 +34,7 @@ class _MetronomeScreenState extends State<MetronomeScreen>
   bool _isSwingingLeft = true;
   bool _soundEnabled = true;
   bool _flashEnabled = false;
+  bool _isBeatFlashActive = false;
 
   // --- AUDIO TIMING UTILS ---
   Timer? _metronomeTimer;
@@ -384,10 +385,20 @@ class _MetronomeScreenState extends State<MetronomeScreen>
 
     setState(() {
       _isSwingingLeft = !_isSwingingLeft;
+      
+      _isBeatFlashActive = true;
 
       _currentBeat++;
       if (_currentBeat > beatsPerMeasure) {
         _currentBeat = 1;
+      }
+    });
+
+    Future.delayed(const Duration(milliseconds: 150), () {
+      if (mounted) {
+        setState(() {
+          _isBeatFlashActive = false;
+        });
       }
     });
 
@@ -642,8 +653,10 @@ class _MetronomeScreenState extends State<MetronomeScreen>
               child: Container(
                 width: 30,
                 height: 30,
-                decoration: const BoxDecoration(
-                  color: AppColors.textDark,
+                decoration: BoxDecoration(
+                  color: (_isBeatFlashActive && _currentBeat == 2 && _timeSignature != 'Linear')
+                      ? AppColors.tertiary 
+                      : AppColors.textDark,
                   shape: BoxShape.circle,
                 ),
               ),

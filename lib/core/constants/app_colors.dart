@@ -10,6 +10,7 @@ class AppColors {
   // --- PRIMARY AND ACCENT COLORS ---
   static const Color primary = Color(0xFF629388);
   static const Color secondary = Color(0xFF8AB789);
+  static const Color tertiary = Color.fromARGB(192, 252, 225, 22);
 
   // --- TEXT COLORS ---
   static const Color textDark = Color(0xFF404040);  /// primary text color for titles, active notes and general UI text
