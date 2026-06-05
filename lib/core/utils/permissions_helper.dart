@@ -13,7 +13,7 @@ class PermissionsHelper {
     if (status.isGranted) return true;
 
     if (status.isPermanentlyDenied && context.mounted) {
-      _showSettingsDialog(context, 'Microphone');
+      await _showSettingsDialog(context, 'Microphone');
     }
     return false;
   }
@@ -24,7 +24,7 @@ class PermissionsHelper {
     if (status.isGranted) return true;
 
     if (status.isPermanentlyDenied && context.mounted) {
-      _showSettingsDialog(context, 'Camera');
+      await _showSettingsDialog(context, 'Camera');
     }
     return false;
   }
@@ -32,8 +32,8 @@ class PermissionsHelper {
   // --- PRIVATE UI COMPONENTS ---
 
   /// Shows a dialog prompting the user to enable permissions in the system settings
-  static void _showSettingsDialog(BuildContext context, String permissionName) {
-    showDialog(
+  static Future<void> _showSettingsDialog(BuildContext context, String permissionName) async {
+    await showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppColors.card,
@@ -55,7 +55,7 @@ class PermissionsHelper {
             onPressed: () => Navigator.pop(context),
             child: const Text(
               'Cancel',
-              style: TextStyle(color: AppColors.textLight),
+              style: TextStyle(color: AppColors.textDark),
             ),
           ),
           TextButton(

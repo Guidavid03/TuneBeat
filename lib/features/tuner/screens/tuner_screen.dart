@@ -79,6 +79,8 @@ class _TunerScreenState extends State<TunerScreen>
   final _audioRecorder = FlutterAudioCapture();
   late final PitchDetector _pitchDetector;
   bool _isListening = false;
+  bool _isRequestingPermission = false;
+  bool _permissionDenied = false;
 
   // --- UI NOTIFIERS ---
   final ValueNotifier<double> currentCents = ValueNotifier(0.0);
@@ -219,15 +221,27 @@ class _TunerScreenState extends State<TunerScreen>
 
   /// Spawns the audio input thread stream and forwards buffers to the pitch analyzer
   Future<void> _startMicrophoneTest() async {
+    if (_isRequestingPermission || _isListening || _permissionDenied) return;
+
+    _isRequestingPermission = true;
+
     bool hasPermission = await PermissionsHelper.requestMicrophonePermission(
       context,
     );
-    if (!hasPermission) return;
+
+    _isRequestingPermission = false;
+
+    if (!hasPermission) {
+      if (mounted) setState(() => _permissionDenied = true);
+      return;
+    }
+
+    if (mounted && _permissionDenied) setState(() => _permissionDenied = false);
 
     await _audioRecorder.init();
     await _audioRecorder.start(
       _onAudioReceived,
-      (error) => debugPrint('Erro no microfone: $error'),
+      (error) => debugPrint('Microphone error: $error'),
       sampleRate: AppConstants.audioSampleRate,
       bufferSize: AppConstants.audioCaptureBufferSize,
     );
