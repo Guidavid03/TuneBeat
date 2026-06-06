@@ -4,7 +4,6 @@ import 'package:tunebeat/core/constants/app_colors.dart';
 
 /// System permissions handler
 class PermissionsHelper {
-
   // --- PUBLIC PERMISSION REQUESTS ---
 
   /// Requests microphone access -> returns true if granted
@@ -32,7 +31,10 @@ class PermissionsHelper {
   // --- PRIVATE UI COMPONENTS ---
 
   /// Shows a dialog prompting the user to enable permissions in the system settings
-  static Future<void> _showSettingsDialog(BuildContext context, String permissionName) async {
+  static Future<void> _showSettingsDialog(
+    BuildContext context,
+    String permissionName,
+  ) async {
     await showDialog(
       context: context,
       builder: (context) => AlertDialog(

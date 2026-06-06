@@ -12,11 +12,11 @@ class AppConstants {
   static const int defaultBpm = 120;
   static const String defaultTimeSignature = '4/4';
 
-    // --- TUNER DEFAULTS AND LIMITS ---
+  // --- TUNER DEFAULTS AND LIMITS ---
   static const String defaultTunerFrequency = '440 Hz';
   static const String defaultTuning = 'E Standard';
   static const double defaultBaseHz = 440.0;
-  
+
   static const double maxCentsDeviation = 50.0;
   static const int tunerMicrophoneInitDelayMs = 100;
 
@@ -36,13 +36,29 @@ class AppConstants {
 
   // --- MUSIC THEORY AND DOMAIN ---
   static const List<String> tunerFrequencies = [
-    '415 Hz', '430 Hz', '432 Hz', '438 Hz', 
-    '440 Hz', '442 Hz', '444 Hz', '446 Hz',
+    '415 Hz',
+    '430 Hz',
+    '432 Hz',
+    '438 Hz',
+    '440 Hz',
+    '442 Hz',
+    '444 Hz',
+    '446 Hz',
   ];
 
   static const List<String> chromaticScale = [
-    'C', 'C#', 'D', 'D#', 'E', 'F', 
-    'F#', 'G', 'G#', 'A', 'A#', 'B',
+    'C',
+    'C#',
+    'D',
+    'D#',
+    'E',
+    'F',
+    'F#',
+    'G',
+    'G#',
+    'A',
+    'A#',
+    'B',
   ];
 
   static const Map<String, List<String>> guitarTunings = {

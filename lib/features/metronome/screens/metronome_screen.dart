@@ -61,7 +61,12 @@ class _MetronomeScreenState extends State<MetronomeScreen>
   @override
   void initState() {
     super.initState();
-    _initAudio();
+
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        _initAudio();
+      }
+    });
   }
 
   @override
