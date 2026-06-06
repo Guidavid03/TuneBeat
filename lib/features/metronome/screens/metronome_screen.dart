@@ -47,11 +47,14 @@ class _MetronomeScreenState extends State<MetronomeScreen>
   CameraController? _cameraController;
   bool _handsFreeCameraReady = false;
   bool _isCameraTransitioning = false;
-  bool _isFlashing = false;
+  bool _isTorchOn = false;
+  static const int _maxFlashBpm = 140;
   int _lastFrameMs = 0;
   bool _lensWasCovered = false;
   bool _lensTriggerFired = false;
   Timer? _lensTriggerTimer;
+  Future<void> _cameraQueue = Future.value();
+  bool _isCameraShuttingDown = false;
 
   // --- NAVIGATION MANAGER ---
   TabController? _tabController;
@@ -134,11 +137,14 @@ class _MetronomeScreenState extends State<MetronomeScreen>
   /// Toggles the hands-free mode; requests camera permissions
   void _onFlashToggled() async {
     if (_isCameraTransitioning) return;
+    _isCameraTransitioning = true;
 
     final bool newState = !_flashEnabled;
 
     if (newState) {
-      _isCameraTransitioning = true;
+      if (_bpm > _maxFlashBpm) {
+        _updateBpm(_maxFlashBpm);
+      }
 
       bool hasPermission = await PermissionsHelper.requestCameraPermission(
         context,
@@ -166,18 +172,13 @@ class _MetronomeScreenState extends State<MetronomeScreen>
           );
         }
       }
-      _isCameraTransitioning = false;
     } else {
-      _isCameraTransitioning = true;
-
       setState(() => _flashEnabled = false);
       await _stopHandsFreeCamera();
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).clearSnackBars();
-      }
-      _isCameraTransitioning = false;
+      if (mounted) ScaffoldMessenger.of(context).clearSnackBars();
     }
+
+    _isCameraTransitioning = false;
   }
 
   /// Initializes the back camera
@@ -218,40 +219,55 @@ class _MetronomeScreenState extends State<MetronomeScreen>
 
   /// Stops the camera stream
   Future<void> _stopHandsFreeCamera() async {
-    while (_isFlashing) {
-      await Future.delayed(const Duration(milliseconds: 10));
-    }
+    _isCameraShuttingDown = true;
 
     _lensTriggerTimer?.cancel();
     _lensTriggerTimer = null;
     _lensWasCovered = false;
     _lensTriggerFired = false;
+    _isTorchOn = false;
 
     final controller = _cameraController;
     _cameraController = null;
 
     if (controller != null) {
-      try {
+      _enqueueCameraAction(() async {
         if (controller.value.isInitialized) {
           if (controller.value.isStreamingImages) {
-            await controller.stopImageStream().catchError((_) {});
+            await controller.stopImageStream();
           }
-          await controller.setFlashMode(FlashMode.off).catchError((_) {});
+          await controller.setFlashMode(FlashMode.off);
+          await controller.dispose();
         }
-        await controller.dispose();
-      } catch (e) {
-        debugPrint('Error disposing camera controller safely: $e');
-      }
+      });
     }
 
-    if (mounted) setState(() => _handsFreeCameraReady = false);
+    await _cameraQueue;
+
+    if (mounted) {
+      setState(() {
+        _handsFreeCameraReady = false;
+        _isCameraShuttingDown = false;
+      });
+    }
   }
 
   // --- COMPUTER VISION ALGORITHM ---
 
+  /// Queues camera actions to ensure they execute sequentially and safely
+  void _enqueueCameraAction(Future<void> Function() action) {
+    _cameraQueue = _cameraQueue.then((_) async {
+      try {
+        await action();
+      } catch (e) {
+        debugPrint('Erro na fila da câmara: $e');
+      }
+    });
+  }
+
   /// Processes video frames to detect drops in brightness
   void _onCameraFrame(CameraImage image) {
-    if (_isFlashing) return;
+    if (_isTorchOn || _isCameraShuttingDown) return;
 
     final int now = DateTime.now().millisecondsSinceEpoch;
     if (now - _lastFrameMs < 100) return;
@@ -301,46 +317,9 @@ class _MetronomeScreenState extends State<MetronomeScreen>
     }
   }
 
-  /// Triggers a brief flashlight burst
-  Future<void> _flashOnce() async {
-    final controller = _cameraController;
-
-    if (controller == null ||
-        !controller.value.isInitialized ||
-        !_handsFreeCameraReady ||
-        !_flashEnabled ||
-        _isFlashing) {
-      return;
-    }
-
-    setState(() => _isFlashing = true);
-
-    try {
-      if (controller.value.isInitialized) {
-        await controller.setFlashMode(FlashMode.torch);
-      }
-
-      await Future.delayed(
-        const Duration(milliseconds: AppConstants.flashDurationMs),
-      );
-
-      if (mounted && _flashEnabled && controller.value.isInitialized) {
-        await controller.setFlashMode(FlashMode.off);
-      }
-    } catch (e) {
-      debugPrint('Flash hardware exception intercepted safely: $e');
-    } finally {
-      await Future.delayed(
-        const Duration(milliseconds: AppConstants.flashRecoveryDelayMs),
-      );
-      if (mounted) {
-        setState(() => _isFlashing = false);
-      }
-    }
-  }
-
   // --- METRONOME ENGINE & LOGIC ---
 
+  /// Toggles the metronome on/off and manages related states
   void _togglePlay() {
     setState(() {
       _isPlaying = !_isPlaying;
@@ -348,6 +327,15 @@ class _MetronomeScreenState extends State<MetronomeScreen>
         _startMetronome(isInitialStart: true);
       } else {
         _metronomeTimer?.cancel();
+        _isTorchOn = false;
+
+        _enqueueCameraAction(() async {
+          if (_cameraController != null && !_isCameraShuttingDown) {
+            if (_cameraController!.value.isInitialized) {
+              await _cameraController!.setFlashMode(FlashMode.off);
+            }
+          }
+        });
       }
     });
   }
@@ -373,7 +361,9 @@ class _MetronomeScreenState extends State<MetronomeScreen>
   /// Fires audio and visual indicators for the current beat
   void _playTick() {
     final bool isLinear = _timeSignature == 'Linear';
-    final int beatsPerMeasure = isLinear ? 4 : (int.tryParse(_timeSignature.split('/')[0]) ?? 4);
+    final int beatsPerMeasure = isLinear
+        ? 4
+        : (int.tryParse(_timeSignature.split('/')[0]) ?? 4);
 
     if (_soundEnabled && _strongSound != null && _weakSound != null) {
       if (_currentBeat == 1 && !isLinear) {
@@ -385,7 +375,6 @@ class _MetronomeScreenState extends State<MetronomeScreen>
 
     setState(() {
       _isSwingingLeft = !_isSwingingLeft;
-      
       _isBeatFlashActive = true;
 
       _currentBeat++;
@@ -402,14 +391,27 @@ class _MetronomeScreenState extends State<MetronomeScreen>
       }
     });
 
-    if (_flashEnabled && _handsFreeCameraReady) {
-      _flashOnce();
+    if (_flashEnabled && _handsFreeCameraReady && !_isCameraShuttingDown) {
+      if (_bpm <= _maxFlashBpm) {
+        _isTorchOn = !_isTorchOn;
+
+        _enqueueCameraAction(() async {
+          if (_cameraController != null && !_isCameraShuttingDown) {
+            await _cameraController!.setFlashMode(
+              _isTorchOn ? FlashMode.torch : FlashMode.off,
+            );
+          }
+        });
+      }
     }
   }
 
+  /// Updates BPM and restarts the metronome if it was already playing
   void _updateBpm(int newBpm) {
     setState(() {
-      _bpm = newBpm.clamp(AppConstants.minBpm, AppConstants.maxBpm);
+      final int currentMax = _flashEnabled ? _maxFlashBpm : AppConstants.maxBpm;
+      _bpm = newBpm.clamp(AppConstants.minBpm, currentMax);
+
       if (_isPlaying) {
         _startMetronome(isInitialStart: false);
       }
@@ -445,11 +447,6 @@ class _MetronomeScreenState extends State<MetronomeScreen>
 
       if (averageInterval > 0) {
         int calculatedBpm = 60000 ~/ averageInterval;
-
-        calculatedBpm = calculatedBpm.clamp(
-          AppConstants.minBpm,
-          AppConstants.maxBpm,
-        );
 
         _updateBpm(calculatedBpm);
       }
@@ -586,7 +583,9 @@ class _MetronomeScreenState extends State<MetronomeScreen>
             child: Slider(
               value: _bpm.toDouble(),
               min: AppConstants.minBpm.toDouble(),
-              max: AppConstants.maxBpm.toDouble(),
+              max: _flashEnabled
+                  ? _maxFlashBpm.toDouble()
+                  : AppConstants.maxBpm.toDouble(),
               onChanged: (newValue) {
                 _updateBpm(newValue.toInt());
               },
@@ -654,8 +653,11 @@ class _MetronomeScreenState extends State<MetronomeScreen>
                 width: 30,
                 height: 30,
                 decoration: BoxDecoration(
-                  color: (_isBeatFlashActive && _currentBeat == 2 && _timeSignature != 'Linear')
-                      ? AppColors.tertiary 
+                  color:
+                      (_isBeatFlashActive &&
+                          _currentBeat == 2 &&
+                          _timeSignature != 'Linear')
+                      ? AppColors.tertiary
                       : AppColors.textDark,
                   shape: BoxShape.circle,
                 ),

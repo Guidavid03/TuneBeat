@@ -14,6 +14,4 @@ class AppConstants {
   // --- HARDWARE CALIBRATIONS ---
   static const double cameraDarkThreshold = 20.0;
   static const int lensTriggerDelayMs = 350;
-  static const int flashDurationMs = 80;
-  static const int flashRecoveryDelayMs = 60;
 }
