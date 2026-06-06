@@ -27,9 +27,9 @@ class _MetronomeScreenState extends State<MetronomeScreen>
   bool get wantKeepAlive => true;
 
   // --- STATE VARIABLES ---
-  int _bpm = 120;
+  int _bpm = AppConstants.defaultBpm;
+  String _timeSignature = AppConstants.defaultTimeSignature;
   bool _isPlaying = false;
-  String _timeSignature = '4/4';
   int _currentBeat = 1;
   bool _isSwingingLeft = true;
   bool _soundEnabled = true;
@@ -41,14 +41,12 @@ class _MetronomeScreenState extends State<MetronomeScreen>
   AudioSource? _strongSound;
   AudioSource? _weakSound;
   final List<DateTime> _tapTimes = [];
-  static const int _maxTapDelayMs = 2000;
 
   // --- OPTICAL HARDWARE SYSTEM ---
   CameraController? _cameraController;
   bool _handsFreeCameraReady = false;
   bool _isCameraTransitioning = false;
   bool _isTorchOn = false;
-  static const int _maxFlashBpm = 140;
   int _lastFrameMs = 0;
   bool _lensWasCovered = false;
   bool _lensTriggerFired = false;
@@ -58,18 +56,6 @@ class _MetronomeScreenState extends State<MetronomeScreen>
 
   // --- NAVIGATION MANAGER ---
   TabController? _tabController;
-
-  final List<String> _timeSignaturesList = [
-    'Linear',
-    '2/4',
-    '3/4',
-    '4/4',
-    '5/4',
-    '6/8',
-    '7/8',
-    '9/8',
-    '12/8',
-  ];
 
   // --- LIFECYCLE METHODS ---
   @override
@@ -142,8 +128,8 @@ class _MetronomeScreenState extends State<MetronomeScreen>
     final bool newState = !_flashEnabled;
 
     if (newState) {
-      if (_bpm > _maxFlashBpm) {
-        _updateBpm(_maxFlashBpm);
+      if (_bpm > AppConstants.maxFlashBpm) {
+        _updateBpm(AppConstants.maxFlashBpm);
       }
 
       bool hasPermission = await PermissionsHelper.requestCameraPermission(
@@ -270,7 +256,7 @@ class _MetronomeScreenState extends State<MetronomeScreen>
     if (_isTorchOn || _isCameraShuttingDown) return;
 
     final int now = DateTime.now().millisecondsSinceEpoch;
-    if (now - _lastFrameMs < 100) return;
+    if (now - _lastFrameMs < AppConstants.cameraFrameThrottleMs) return;
     _lastFrameMs = now;
 
     final plane = image.planes[0];
@@ -310,9 +296,12 @@ class _MetronomeScreenState extends State<MetronomeScreen>
       _lensTriggerTimer?.cancel();
 
       if (_lensTriggerFired) {
-        Future.delayed(const Duration(milliseconds: 500), () {
-          if (mounted) setState(() => _lensTriggerFired = false);
-        });
+        Future.delayed(
+          const Duration(milliseconds: AppConstants.lensTriggerResetDelayMs),
+          () {
+            if (mounted) setState(() => _lensTriggerFired = false);
+          },
+        );
       }
     }
   }
@@ -383,16 +372,19 @@ class _MetronomeScreenState extends State<MetronomeScreen>
       }
     });
 
-    Future.delayed(const Duration(milliseconds: 150), () {
-      if (mounted) {
-        setState(() {
-          _isBeatFlashActive = false;
-        });
-      }
-    });
+    Future.delayed(
+      const Duration(milliseconds: AppConstants.visualFlashDurationMs),
+      () {
+        if (mounted) {
+          setState(() {
+            _isBeatFlashActive = false;
+          });
+        }
+      },
+    );
 
     if (_flashEnabled && _handsFreeCameraReady && !_isCameraShuttingDown) {
-      if (_bpm <= _maxFlashBpm) {
+      if (_bpm <= AppConstants.maxFlashBpm) {
         _isTorchOn = !_isTorchOn;
 
         _enqueueCameraAction(() async {
@@ -409,7 +401,9 @@ class _MetronomeScreenState extends State<MetronomeScreen>
   /// Updates BPM and restarts the metronome if it was already playing
   void _updateBpm(int newBpm) {
     setState(() {
-      final int currentMax = _flashEnabled ? _maxFlashBpm : AppConstants.maxBpm;
+      final int currentMax = _flashEnabled
+          ? AppConstants.maxFlashBpm
+          : AppConstants.maxBpm;
       _bpm = newBpm.clamp(AppConstants.minBpm, currentMax);
 
       if (_isPlaying) {
@@ -425,14 +419,15 @@ class _MetronomeScreenState extends State<MetronomeScreen>
     final now = DateTime.now();
 
     if (_tapTimes.isNotEmpty &&
-        now.difference(_tapTimes.last).inMilliseconds > _maxTapDelayMs) {
+        now.difference(_tapTimes.last).inMilliseconds >
+            AppConstants.maxTapDelayMs) {
       _tapTimes.clear();
     }
 
     _tapTimes.add(now);
 
     if (_tapTimes.length >= 2) {
-      if (_tapTimes.length > 5) {
+      if (_tapTimes.length > AppConstants.maxTapTempoHistory) {
         _tapTimes.removeAt(0);
       }
 
@@ -490,7 +485,7 @@ class _MetronomeScreenState extends State<MetronomeScreen>
                 spacing: 16,
                 runSpacing: 16,
                 alignment: WrapAlignment.center,
-                children: _timeSignaturesList.map((signature) {
+                children: AppConstants.timeSignatures.map((signature) {
                   final bool isSelected = signature == _timeSignature;
 
                   return GestureDetector(
@@ -584,7 +579,7 @@ class _MetronomeScreenState extends State<MetronomeScreen>
               value: _bpm.toDouble(),
               min: AppConstants.minBpm.toDouble(),
               max: _flashEnabled
-                  ? _maxFlashBpm.toDouble()
+                  ? AppConstants.maxFlashBpm.toDouble()
                   : AppConstants.maxBpm.toDouble(),
               onChanged: (newValue) {
                 _updateBpm(newValue.toInt());

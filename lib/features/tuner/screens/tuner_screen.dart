@@ -28,51 +28,8 @@ class _TunerScreenState extends State<TunerScreen>
 
   // --- REFERENCE CONFIGURATIONS ---
 
-  final List<String> frequencies = [
-    '415 Hz',
-    '430 Hz',
-    '432 Hz',
-    '438 Hz',
-    '440 Hz',
-    '442 Hz',
-    '444 Hz',
-    '446 Hz',
-  ];
-
-  static const List<String> chromaticScale = [
-    'C',
-    'C#',
-    'D',
-    'D#',
-    'E',
-    'F',
-    'F#',
-    'G',
-    'G#',
-    'A',
-    'A#',
-    'B',
-  ];
-
-  final Map<String, List<String>> tuningMap = {
-    'E Standard': ['E2', 'A2', 'D3', 'G3', 'B3', 'E4'],
-    'Eb Standard': ['Eb2', 'Ab2', 'Db3', 'Gb3', 'Bb3', 'Eb4'],
-    'D Standard': ['D2', 'G2', 'C3', 'F3', 'A3', 'D4'],
-    'C Standard': ['C2', 'F2', 'Bb2', 'Eb3', 'G3', 'C4'],
-
-    'Drop D': ['D2', 'A2', 'D3', 'G3', 'B3', 'E4'],
-    'Drop C#': ['C#2', 'G#2', 'C#3', 'F#3', 'A#3', 'D#4'],
-    'Drop C': ['C2', 'G2', 'C3', 'F3', 'A3', 'D4'],
-    'Drop B': ['B1', 'F#2', 'B2', 'E3', 'G#3', 'C#4'],
-    'Drop A': ['A1', 'E2', 'A2', 'D3', 'F#3', 'B3'],
-
-    'Open G': ['D2', 'G2', 'D3', 'G3', 'B3', 'D4'],
-    'Open D': ['D2', 'A2', 'D3', 'F#3', 'A3', 'D4'],
-    'Open E': ['E2', 'B2', 'E3', 'G#3', 'B3', 'E4'],
-  };
-
-  String selectedFrequency = '440 Hz';
-  String selectedTuning = 'E Standard';
+  String selectedFrequency = AppConstants.defaultTunerFrequency;
+  String selectedTuning = AppConstants.defaultTuning;
 
   // --- DSP & PROCESSING CACHES ---
   final Map<String, double> _chromaticCache = {};
@@ -108,7 +65,7 @@ class _TunerScreenState extends State<TunerScreen>
 
     _buildChromaticCache();
     WakelockPlus.enable();
-    
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (mounted) {
         await _preloadCurrentTuning();
@@ -173,7 +130,7 @@ class _TunerScreenState extends State<TunerScreen>
     _chromaticCache.clear();
 
     for (int i = 1; i <= 6; i++) {
-      for (String n in chromaticScale) {
+      for (String n in AppConstants.chromaticScale) {
         String note = '$n$i';
         _chromaticCache[note] = _calculateTargetFrequency(note);
       }
@@ -181,7 +138,7 @@ class _TunerScreenState extends State<TunerScreen>
   }
 
   double _getBaseFrequency() {
-    return double.tryParse(selectedFrequency.split(' ')[0]) ?? 440.0;
+    return double.tryParse(selectedFrequency.split(' ')[0]) ?? AppConstants.defaultBaseHz;
   }
 
   /// Calculates the mathematical frequency of a note using standard equal temperament
@@ -206,14 +163,14 @@ class _TunerScreenState extends State<TunerScreen>
       note = flatToSharp[note]!;
     }
 
-    final int noteIndex = chromaticScale.indexOf(note);
+    final int noteIndex = AppConstants.chromaticScale.indexOf(note);
     final int semitonesFromA4 = (noteIndex - 9) + ((octave - 4) * 12);
 
     return fBase * pow(2.0, semitonesFromA4 / 12.0);
   }
 
   List<double> _getCurrentActiveFrequencies() {
-    final List<String> currentNotes = tuningMap[selectedTuning]!;
+    final List<String> currentNotes = AppConstants.guitarTunings[selectedTuning]!;
     return currentNotes.map((note) => _calculateTargetFrequency(note)).toList();
   }
 
@@ -289,7 +246,7 @@ class _TunerScreenState extends State<TunerScreen>
 
       if (mounted && _isListening) {
         currentNote.value = closestString;
-        currentCents.value = finalCents.clamp(-50.0, 50.0);
+        currentCents.value = finalCents.clamp(-AppConstants.maxCentsDeviation, AppConstants.maxCentsDeviation);
         currentHzDisplay.value = "${detectedHz.toStringAsFixed(1)} Hz";
       }
     }
@@ -299,7 +256,7 @@ class _TunerScreenState extends State<TunerScreen>
 
   /// Preloads specific sine wave sound vectors into memory
   Future<void> _preloadCurrentTuning() async {
-    final List<String> currentNotes = tuningMap[selectedTuning]!;
+    final List<String> currentNotes = AppConstants.guitarTunings[selectedTuning]!;
 
     for (String note in currentNotes) {
       if (!_loadedSources.containsKey(note)) {
@@ -416,7 +373,7 @@ class _TunerScreenState extends State<TunerScreen>
                       keepFrequencies: _getCurrentActiveFrequencies(),
                     );
                   },
-                  itemBuilder: (context) => frequencies
+                  itemBuilder: (context) => AppConstants.tunerFrequencies
                       .map(
                         (value) => PopupMenuItem(
                           value: value,
@@ -487,7 +444,7 @@ class _TunerScreenState extends State<TunerScreen>
                       keepFrequencies: _getCurrentActiveFrequencies(),
                     );
                   },
-                  itemBuilder: (context) => tuningMap.keys
+                  itemBuilder: (context) => AppConstants.guitarTunings.keys
                       .map(
                         (value) => PopupMenuItem(
                           value: value,
@@ -540,7 +497,7 @@ class _TunerScreenState extends State<TunerScreen>
             currentHzDisplay,
           ]),
           builder: (context, child) {
-            final double percentOutOfTune = (currentCents.value.abs() / 50.0)
+            final double percentOutOfTune = (currentCents.value.abs() / AppConstants.maxCentsDeviation)
                 .clamp(0.0, 1.0);
             final Color dynamicEdgeColor =
                 Color.lerp(
@@ -634,7 +591,7 @@ class _TunerScreenState extends State<TunerScreen>
           child: ClipRRect(
             borderRadius: BorderRadius.circular(30),
             child: Row(
-              children: tuningMap[selectedTuning]!.asMap().entries.map((entry) {
+              children: AppConstants.guitarTunings[selectedTuning]!.asMap().entries.map((entry) {
                 final int index = entry.key;
                 final String nota = entry.value;
 
